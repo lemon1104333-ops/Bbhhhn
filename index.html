@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>4重振り子ゴルフ</title>
+<style>
+:root{--hud:#fff;box-sizing:border-box}
+html,body{margin:0;height:100%;background:#7ec8e3;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;font-family:-apple-system,"Hiragino Sans",sans-serif}
+canvas{display:block;width:100%;height:100%}
+#hud{position:fixed;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top,0px) + 12px) 16px 0;display:flex;justify-content:space-between;color:var(--hud);text-shadow:0 1px 4px rgba(0,0,0,.5);pointer-events:none;font-weight:700}
+#hud small{display:block;font-size:12px;opacity:.85;font-weight:500}
+#hud b{font-size:28px}
+#msg{position:fixed;left:0;right:0;bottom:calc(env(safe-area-inset-bottom,0px) + 28px);text-align:center;color:#fff;font-size:17px;font-weight:700;text-shadow:0 1px 4px rgba(0,0,0,.6);pointer-events:none;padding:0 16px}
+#banner{position:fixed;left:0;right:0;top:26%;text-align:center;pointer-events:none;opacity:0;font-weight:900;letter-spacing:.06em}
+#banner.on{animation:pop 2s ease-out forwards}
+@keyframes pop{0%{opacity:0;transform:scale(.3)}12%{opacity:1;transform:scale(1.28)}22%{transform:scale(1)}80%{opacity:1}100%{opacity:0;transform:scale(1.06) translateY(-14px)}}
+#banner small{display:block;font-size:14px;letter-spacing:.3em;color:#fff;text-shadow:0 1px 6px rgba(0,0,0,.7);margin-bottom:6px}
+#banner span{display:inline-block;padding:6px 20px;font-size:var(--fs,34px);background:linear-gradient(180deg,#fff7c2,#ffd54a 45%,#e09a00);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent;filter:drop-shadow(0 2px 0 rgba(120,70,0,.85)) drop-shadow(0 0 14px var(--glow,#ffc800))}
+#banner.rb span{background-image:linear-gradient(90deg,#ff5252,#ffd740,#69f0ae,#40c4ff,#e040fb,#ff5252);background-size:200% 100%;animation:rb 1s linear infinite}
+@keyframes rb{to{background-position:200% 0}}
+#ranks{position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 92px);width:min(92vw,330px);box-sizing:border-box;background:rgba(0,0,0,.45);color:#fff;border-radius:14px;padding:10px 14px;font-size:12px;line-height:1.6;font-weight:700;pointer-events:none;transition:opacity .25s}
+#ranks b{display:block;text-align:center;font-size:13px;margin-bottom:4px;letter-spacing:.3em}
+#ranks div{display:flex;gap:10px}
+#ranks i{font-style:normal;color:#fff;opacity:.75;min-width:54px;text-align:right}
+#ranks{display:none;pointer-events:auto;top:calc(env(safe-area-inset-top,0px) + 96px);background:rgba(0,0,0,.7)}
+#ranks.open{display:block}
+#rbtn{display:none;position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 84px);background:linear-gradient(180deg,#ffe27a,#ffb300);color:#4a2c00;border:0;border-radius:999px;padding:14px 30px;font:800 18px -apple-system,"Hiragino Sans",sans-serif;box-shadow:0 3px 12px rgba(0,0,0,.45),0 0 18px rgba(255,200,0,.6);animation:bp 1.6s ease-in-out infinite}
+@keyframes bp{50%{transform:translateX(-50%) scale(1.06)}}
+#copy{display:none;position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 140px);background:rgba(0,0,0,.55);color:#fff;border:0;border-radius:999px;padding:9px 20px;max-width:92vw;word-break:break-all;font:700 14px -apple-system,"Hiragino Sans",sans-serif}
+#flash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none}
+#share{display:none;position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 84px);background:#000;color:#fff;padding:12px 24px;border-radius:999px;font-weight:700;font-size:16px;text-decoration:none;box-shadow:0 2px 8px rgba(0,0,0,.4)}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud"><div><small>飛距離</small><b id="dist">0.0</b> m<small id="rank" style="margin-top:2px;font-size:16px;font-weight:800;text-shadow:0 0 8px currentColor,0 1px 4px rgba(0,0,0,.5)"></small></div><div style="text-align:center;font-size:13px"><small id="snaps"></small></div><div style="text-align:right"><small>ベスト</small><b id="best">0.0</b> m</div></div>
+<button id="rbtn">🏅 称号一覧</button><div id="ranks"></div><div id="banner"><small></small><span></span></div><div id="flash"></div><div id="msg"></div>
+<button id="copy">🔗 リンクをコピー</button>
+<a id="share" target="_blank" rel="noopener noreferrer">𝕏 で結果をシェア</a>
+<script>
+const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+const $=id=>document.getElementById(id);
+let W,H,dpr;
+function resize(){dpr=window.devicePixelRatio||1;W=innerWidth;H=innerHeight;cv.width=W*dpr;cv.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0)}
+addEventListener('resize',resize);resize();
+
+const N=4,L=1.9,G=9.8,PY=8.1,DAMP=0.005,BX=0.5,BY=0.5,MAXPHI=2.9;
+const TS=1.8;
+let shake=0,lastSw=0,lastTick=0,AC=null,curRank=null;
+const RANKS=[[100,'さくらガーデン'],[300,'伊丹'],[350,'天使'],[400,'ユナイテッド'],[500,'ゴルフザクザク'],[600,'上位ITM'],[700,'ビッグマグナム'],[800,'猛者'],[900,'伊丹神'],[1000,'神ビッグマグナム'],[1300,'今日七夕で恋愛運良いらしいよ'],[2000,'ビッグマグナムITM20']];
+function rankIdx(d){let r=-1;RANKS.forEach((x,i)=>{if(d>=x[0])r=i});return r}
+function rankOf(d){const i=rankIdx(d);return i<0?null:RANKS[i][1]}
+const GL=['#ff9ec4','#ffd54a','#ffd54a','#ffd54a','#ffb300','#ff7043','#ff5252','#e040fb','#e040fb','#40c4ff','#ff4081','#ffea00'];
+let parts=[];
+function renderRanks(){
+  $('ranks').innerHTML='<b>称号ランク</b>'+RANKS.map((x,i)=>{const ok=best>=x[0];return '<div><i>'+x[0]+'m</i><span style="color:'+(ok?GL[i]:'#aaa')+'">'+(ok?x[1]:'？？？')+'</span></div>'}).join('')+'<div style="justify-content:center;opacity:.7;font-weight:500;margin-top:4px">タップで閉じる</div>';
+}
+function showR(v){$('rbtn').style.display=v?'block':'none';$('copy').style.display=v?'block':'none';if(!v)$('ranks').classList.remove('open')}
+$('copy').onclick=async()=>{
+  const b=$('copy');let ok=false;
+  try{await navigator.clipboard.writeText(SHARE_URL);ok=true}catch(e){
+    try{const t=document.createElement('textarea');t.value=SHARE_URL;t.style.cssText='position:fixed;opacity:0';document.body.appendChild(t);t.select();ok=document.execCommand('copy');t.remove()}catch(e2){}
+  }
+  b.textContent=ok?'✅ コピーしました！':SHARE_URL;
+  setTimeout(()=>{b.textContent='🔗 リンクをコピー'},ok?1800:6000);
+};
+$('rbtn').onclick=()=>{renderRanks();$('ranks').classList.toggle('open')};
+$('ranks').onclick=()=>$('
